@@ -274,6 +274,85 @@ async function handleMessage(msg) {
   const chatId = msg.chat.id.toString();
   const text = (msg.text || '').trim();
 
+  // ── CONSULTAS DE TAREAS ─────────────────────────────────
+  const textoLower = text.toLowerCase().trim();
+
+  const esConsultaHoy = /(pendientes?|qué?\s+hay|que\s+hay|para\s+hoy|de\s+hoy|tareas?\s+hoy|hoy.*tarea|boti.*qué?|boti.*que)/.test(textoLower) && !/semana|próxima|proxima/.test(textoLower);
+
+  const esConsultaSemana = /esta\s+semana|semana\s+(actual|esta)|para\s+la\s+semana/.test(textoLower);
+
+  const esConsultaProxima = /próxima\s+semana|proxima\s+semana|semana\s+que\s+viene|semana\s+próxima/.test(textoLower);
+
+  if (esConsultaProxima) {
+    const tasks = await getSheetData();
+    const start = arDate(7);
+    const end = arDate(14);
+    const semana = tasks.filter(t => !t.completada && t.fecha >= start && t.fecha < end)
+      .sort((a,b) => a.fecha.localeCompare(b.fecha));
+    if (semana.length === 0) {
+      return sendKeyboard(chatId, `📋 No tenés tareas para la próxima semana. ¡A descansar! 😊`, [['➕ Nueva tarea', '📋 Ver app']]);
+    }
+    const porDia = {};
+    semana.forEach(t => { if (!porDia[t.fecha]) porDia[t.fecha] = []; porDia[t.fecha].push(t); });
+    let msg = `📋 *Tareas de la próxima semana*
+
+`;
+    for (const [fecha, tareas] of Object.entries(porDia)) {
+      msg += `*${formatDate(fecha)}*
+`;
+      tareas.forEach(t => { msg += `  • ${t.categoria} ${t.nombre}${t.hora ? ` 🕐 ${t.hora}` : ''}
+`; });
+      msg += '
+';
+    }
+    msg += `_${semana.length} tarea${semana.length !== 1 ? 's' : ''} en total_`;
+    return sendKeyboard(chatId, msg, [['➕ Nueva tarea', '📋 Ver app']]);
+  }
+
+  if (esConsultaSemana) {
+    const tasks = await getSheetData();
+    const today = arDate(0);
+    const end = arDate(7);
+    const semana = tasks.filter(t => !t.completada && t.fecha >= today && t.fecha <= end)
+      .sort((a,b) => a.fecha.localeCompare(b.fecha));
+    if (semana.length === 0) {
+      return sendKeyboard(chatId, `📋 No tenés tareas para esta semana. ¡Todo al día! 🎉`, [['➕ Nueva tarea', '📋 Ver app']]);
+    }
+    const porDia = {};
+    semana.forEach(t => { if (!porDia[t.fecha]) porDia[t.fecha] = []; porDia[t.fecha].push(t); });
+    let msg = `📋 *Tareas de esta semana*
+
+`;
+    for (const [fecha, tareas] of Object.entries(porDia)) {
+      msg += `*${formatDate(fecha)}*
+`;
+      tareas.forEach(t => { msg += `  • ${t.categoria} ${t.nombre}${t.hora ? ` 🕐 ${t.hora}` : ''}
+`; });
+      msg += '
+';
+    }
+    msg += `_${semana.length} tarea${semana.length !== 1 ? 's' : ''} en total_`;
+    return sendKeyboard(chatId, msg, [['➕ Nueva tarea', '📋 Ver app']]);
+  }
+
+  if (esConsultaHoy) {
+    const tasks = await getSheetData();
+    const today = arDate(0);
+    const hoy = tasks.filter(t => !t.completada && t.fecha === today)
+      .sort((a,b) => (a.hora || '').localeCompare(b.hora || ''));
+    if (hoy.length === 0) {
+      return sendKeyboard(chatId, `📋 No tenés tareas pendientes para hoy. ¡Día libre! 🎉`, [['➕ Nueva tarea', '📋 Ver app']]);
+    }
+    let msg = `📋 *Tareas de hoy*
+
+`;
+    hoy.forEach(t => { msg += `• ${t.categoria} *${t.nombre}*${t.hora ? ` 🕐 ${t.hora}` : ''}
+`; });
+    msg += `
+_${hoy.length} tarea${hoy.length !== 1 ? 's' : ''} pendiente${hoy.length !== 1 ? 's' : ''}_`;
+    return sendKeyboard(chatId, msg, [['➕ Nueva tarea', '📋 Ver app']]);
+  }
+
   // Handle reminder actions
   if (text === '✅ Marcar como hecha' && state[chatId] && state[chatId].pendingReminder) {
     const { taskId, taskNombre } = state[chatId].pendingReminder;
