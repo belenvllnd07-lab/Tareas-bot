@@ -172,6 +172,23 @@ async function sendDailySummary() {
   await sendMessage(CHAT_ID, msg);
 }
 
+async function sendDailyOnly() {
+  const tasks = await getSheetData();
+  const today = todayStr();
+  const hoy = tasks.filter(t => !t.completada && t.fecha === today)
+    .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+  if (hoy.length === 0) {
+    await sendMessage(CHAT_ID, '📋 *Resumen de hoy*\n\n¡No tenés tareas para hoy! 🎉');
+    return;
+  }
+  let msg = `📋 *Resumen de hoy* — ${new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}\n\n`;
+  hoy.forEach(t => { msg += `• ${t.categoria} *${t.nombre}*${t.hora ? ` 🕐 ${t.hora}` : ''}
+`; });
+  msg += `
+_${hoy.length} tarea${hoy.length !== 1 ? 's' : ''} para hoy_`;
+  await sendMessage(CHAT_ID, msg);
+}
+
 async function checkTaskReminders() {
   const tasks = await getSheetData();
   const today = todayStr();
@@ -197,7 +214,16 @@ function startScheduler() {
     const dateStr = todayStr();
     if (timeStr === '09:00' && lastDailyDate !== dateStr) {
       lastDailyDate = dateStr;
-      await sendDailySummary().catch(e => console.error('Daily error:', e));
+      const diaSemana = new Date().getDay(); // 0=dom, 1=lun, 2=mar... 5=vie, 6=sab
+      const diaAR = diaSemana; // Railway usa UTC pero ya compensamos con arDate
+      if (diaAR === 1) {
+        // Lunes: resumen semanal
+        await sendDailySummary().catch(e => console.error('Weekly error:', e));
+      } else if (diaAR >= 2 && diaAR <= 5) {
+        // Martes a viernes: resumen del día
+        await sendDailyOnly().catch(e => console.error('Daily error:', e));
+      }
+      // Sábado (6) y domingo (0): nada
     }
     if (timeStr !== lastMinuteCheck) {
       lastMinuteCheck = timeStr;
