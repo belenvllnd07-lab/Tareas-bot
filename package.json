@@ -1,0 +1,12 @@
+{
+  "name": "mis-tareas-bot",
+  "version": "1.0.0",
+  "description": "Bot de Telegram para gestión de tareas",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.0.0"
+  }
+}
