@@ -1,10 +1,11 @@
 const https = require('https');
 
-const BOT_TOKEN = '8965677289:AAHjoNscXXs64kFedF8F1KqwjpeqCIiWi_M';
-const SHEET_ID  = '1f0v6D6ue9iUp5VLMcyiFvY5EpNIpMKWLcS0M53rVeMs';
-const APP_URL   = 'https://belenvllnd07-lab.github.io/mis-tareas/task-manager.html';
+const BOT_TOKEN  = '8965677289:AAHjoNscXXs64kFedF8F1KqwjpeqCIiWi_M';
+const CHAT_ID    = '8959251221';
+const SHEET_ID   = '1f0v6D6ue9iUp5VLMcyiFvY5EpNIpMKWLcS0M53rVeMs';
+const APP_URL    = 'https://belenvllnd07-lab.github.io/mis-tareas/task-manager.html';
+const GOOGLE_TOKEN = process.env.GOOGLE_TOKEN || '';
 
-// Estado por chat para conversación multi-paso
 const state = {};
 
 function apiRequest(path, body) {
@@ -38,49 +39,40 @@ function sendKeyboard(chatId, text, buttons) {
 }
 
 async function appendToSheet(row) {
-  const serviceAccountEmail = process.env.GOOGLE_SERVICE_EMAIL;
-  const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
-  
-  if (!serviceAccountEmail || !privateKey) {
-    console.log('No Google credentials, skipping sheet append');
-    return false;
-  }
-
-  try {
-    const { GoogleAuth } = require('google-auth-library');
-    const auth = new GoogleAuth({
-      credentials: { client_email: serviceAccountEmail, private_key: privateKey },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    const client = await auth.getClient();
-    const token = await client.getAccessToken();
-
+  const token = process.env.GOOGLE_TOKEN;
+  if (!token) { console.log('No GOOGLE_TOKEN set'); return false; }
+  return new Promise((resolve) => {
     const body = JSON.stringify({ values: [row] });
-    await new Promise((resolve, reject) => {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Hoja%201:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
-      const opts = {
-        hostname: 'sheets.googleapis.com',
-        path: `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token.token}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
-      };
-      const req = https.request(opts, res => { res.on('data', () => {}); res.on('end', resolve); });
-      req.on('error', reject);
-      req.write(body);
-      req.end();
+    const path = `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+    const opts = {
+      hostname: 'sheets.googleapis.com',
+      path, method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body)
+      }
+    };
+    const req = https.request(opts, res => {
+      let raw = '';
+      res.on('data', d => raw += d);
+      res.on('end', () => {
+        try {
+          const r = JSON.parse(raw);
+          resolve(!r.error);
+        } catch(e) { resolve(false); }
+      });
     });
-    return true;
-  } catch(e) {
-    console.error('Sheet error:', e.message);
-    return false;
-  }
+    req.on('error', () => resolve(false));
+    req.write(body);
+    req.end();
+  });
 }
 
 async function handleMessage(msg) {
   const chatId = msg.chat.id.toString();
   const text = (msg.text || '').trim();
 
-  // Inicio
   if (text === '/start') {
     state[chatId] = null;
     return sendKeyboard(chatId,
@@ -89,25 +81,21 @@ async function handleMessage(msg) {
     );
   }
 
-  // Ayuda
   if (text === '/ayuda' || text === '❓ Ayuda') {
     return sendMessage(chatId,
-      `*Comandos disponibles:*\n\n➕ *Nueva tarea* — Crear una tarea nueva\n📋 *Ver app* — Abrir la app completa\n\nPodés escribir directamente el nombre de la tarea cuando te lo pida.`
+      `*Comandos:*\n\n➕ *Nueva tarea* — Crear tarea\n📋 *Ver app* — Abrir la app`
     );
   }
 
-  // Ver app
   if (text === '📋 Ver app' || text === '/app') {
-    return sendMessage(chatId, `📱 Abrí tu app aquí:\n${APP_URL}`);
+    return sendMessage(chatId, `📱 Abrí tu app:\n${APP_URL}`);
   }
 
-  // Nueva tarea - inicio
   if (text === '➕ Nueva tarea' || text === '/nueva') {
     state[chatId] = { step: 'nombre' };
-    return sendMessage(chatId, `📝 *Nueva tarea*\n\n¿Cuál es el nombre de la tarea?`);
+    return sendMessage(chatId, `📝 *Nueva tarea*\n\n¿Cuál es el nombre?`);
   }
 
-  // Flujo de nueva tarea
   if (state[chatId]) {
     const s = state[chatId];
 
@@ -120,86 +108,64 @@ async function handleMessage(msg) {
       );
     }
 
-    if (s.step === 'fecha') {
+    if (s.step === 'fecha' || s.step === 'fecha_manual') {
       const today = new Date();
       let fecha;
       if (text === 'Hoy') {
         fecha = today.toISOString().split('T')[0];
       } else if (text === 'Mañana') {
-        today.setDate(today.getDate() + 1);
-        fecha = today.toISOString().split('T')[0];
+        today.setDate(today.getDate() + 1); fecha = today.toISOString().split('T')[0];
       } else if (text === 'En 3 días') {
-        today.setDate(today.getDate() + 3);
-        fecha = today.toISOString().split('T')[0];
+        today.setDate(today.getDate() + 3); fecha = today.toISOString().split('T')[0];
       } else if (text === 'En 1 semana') {
-        today.setDate(today.getDate() + 7);
-        fecha = today.toISOString().split('T')[0];
+        today.setDate(today.getDate() + 7); fecha = today.toISOString().split('T')[0];
       } else if (text === 'Otra fecha') {
         s.step = 'fecha_manual';
         return sendMessage(chatId, `📅 Escribí la fecha en formato *DD/MM/AAAA*:`);
       } else {
-        // intentar parsear fecha manual
         const parts = text.split('/');
         if (parts.length === 3) {
           fecha = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
         } else {
-          return sendMessage(chatId, `❌ No entendí la fecha. Escribila como DD/MM/AAAA o elegí una opción.`);
+          return sendMessage(chatId, `❌ Formato incorrecto. Usá DD/MM/AAAA`);
         }
       }
       s.fecha = fecha;
       s.step = 'recurrencia';
-      return sendKeyboard(chatId,
-        `🔁 ¿Se repite?`,
-        [['Una vez', 'Diaria'], ['Semanal', 'Quincenal'], ['Mensual', 'Anual']]
-      );
-    }
-
-    if (s.step === 'fecha_manual') {
-      const parts = text.split('/');
-      if (parts.length !== 3) return sendMessage(chatId, `❌ Formato incorrecto. Usá DD/MM/AAAA`);
-      s.fecha = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
-      s.step = 'recurrencia';
-      return sendKeyboard(chatId,
-        `🔁 ¿Se repite?`,
+      return sendKeyboard(chatId, `🔁 ¿Se repite?`,
         [['Una vez', 'Diaria'], ['Semanal', 'Quincenal'], ['Mensual', 'Anual']]
       );
     }
 
     if (s.step === 'recurrencia') {
-      const recMap = { 'Una vez':'ninguna', 'Diaria':'diaria', 'Semanal':'semanal', 'Quincenal':'quincenal', 'Mensual':'mensual', 'Anual':'anual' };
+      const recMap = { 'Una vez':'ninguna','Diaria':'diaria','Semanal':'semanal','Quincenal':'quincenal','Mensual':'mensual','Anual':'anual' };
       s.recurrencia = recMap[text] || 'ninguna';
       s.step = 'categoria';
-      return sendKeyboard(chatId,
-        `📂 ¿Categoría?`,
+      return sendKeyboard(chatId, `📂 ¿Categoría?`,
         [['💰 Pagos', '🏥 Salud'], ['🏠 Hogar', '💼 Trabajo'], ['📞 Llamadas', '📋 General']]
       );
     }
 
     if (s.step === 'categoria') {
       s.categoria = text;
-      // Guardar tarea
       const id = Date.now().toString();
       const row = [id, s.nombre, '', s.fecha, '09:00', s.recurrencia, s.categoria, 'false', '[]', new Date().toISOString()];
       const saved = await appendToSheet(row);
       state[chatId] = null;
-
       const fechaDisplay = new Date(s.fecha + 'T00:00:00').toLocaleDateString('es-AR', { weekday:'short', day:'numeric', month:'short' });
-
       return sendKeyboard(chatId,
-        `✅ *Tarea guardada!*\n\n📋 *${s.nombre}*\n📅 ${fechaDisplay}\n🔁 ${s.recurrencia}\n${s.categoria}\n\n${saved ? '✓ Sincronizada en Google Sheets' : '⚠️ Guardada localmente (configurá credenciales para sincronizar)'}`,
+        `✅ *Tarea guardada!*\n\n📋 *${s.nombre}*\n📅 ${fechaDisplay}\n🔁 ${s.recurrencia}\n${s.categoria}\n\n${saved ? '✓ Sincronizada en Google Sheets ✓' : '⚠️ No se pudo sincronizar con Sheets'}`,
         [['➕ Nueva tarea', '📋 Ver app']]
       );
     }
   }
 
-  // Mensaje no reconocido
   return sendKeyboard(chatId,
-    `No entendí ese mensaje. ¿Qué querés hacer?`,
+    `No entendí. ¿Qué querés hacer?`,
     [['➕ Nueva tarea', '📋 Ver app'], ['❓ Ayuda']]
   );
 }
 
-// Polling
 let offset = 0;
 async function poll() {
   try {
@@ -207,9 +173,7 @@ async function poll() {
     if (res.result && res.result.length > 0) {
       for (const update of res.result) {
         offset = update.update_id + 1;
-        if (update.message) {
-          await handleMessage(update.message).catch(e => console.error('Handler error:', e));
-        }
+        if (update.message) await handleMessage(update.message).catch(e => console.error(e));
       }
     }
   } catch(e) {
