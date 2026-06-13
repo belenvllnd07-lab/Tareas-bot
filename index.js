@@ -197,12 +197,17 @@ async function handleMessage(msg) {
   const chatId = msg.chat.id.toString();
   const text = (msg.text || '').trim();
 
-  if (text === '/start') {
+  if (text === '/start' || /^hola$/i.test(text) || /^buenas$/i.test(text) || /^hey$/i.test(text) || /^buen(os|as) d(ía|ia)s?$/i.test(text)) {
     state[chatId] = null;
     return sendKeyboard(chatId,
-      `👋 Hola! Soy tu asistente de tareas.\n\n¿Qué querés hacer?`,
-      [['➕ Nueva tarea', '📋 Ver app'], ['❓ Ayuda']]
+      `👋 ¡Hola Belén! ¿Querés agregar una nueva tarea?`,
+      [['➕ Sí, nueva tarea', '📋 Ver app'], ['❓ Ayuda', 'No, gracias']]
     );
+  }
+
+  if (text === 'No, gracias') {
+    state[chatId] = null;
+    return sendMessage(chatId, `¡Hasta luego Belén! 😊 Cualquier cosa que necesites, acá estoy.`);
   }
 
   if (text === '❓ Ayuda' || text === '/ayuda') {
@@ -215,7 +220,7 @@ async function handleMessage(msg) {
     return sendMessage(chatId, `📱 Abrí tu app:\n${APP_URL}`);
   }
 
-  if (text === '➕ Nueva tarea' || text === '/nueva') {
+  if (text === '➕ Nueva tarea' || text === '➕ Sí, nueva tarea' || text === '/nueva') {
     state[chatId] = { step: 'nombre' };
     return sendMessage(chatId, `📝 *Nueva tarea*\n\n¿Cuál es el nombre?`);
   }
@@ -275,14 +280,14 @@ async function handleMessage(msg) {
       const saved = await appendToSheet(row);
       state[chatId] = null;
       return sendKeyboard(chatId,
-        `✅ *Tarea guardada!*\n\n📋 *${s.nombre}*\n📅 ${formatDate(s.fecha)} 🕐 ${s.hora}\n🔁 ${s.recurrencia}\n${s.categoria}\n\n${saved ? '✓ Sincronizada en Google Sheets\n🔔 Te voy a avisar el día y hora indicados' : '⚠️ No se pudo sincronizar con Sheets'}`,
-        [['➕ Nueva tarea', '📋 Ver app']]
+        `✅ *Tarea guardada!*\n\n📋 *${s.nombre}*\n📅 ${formatDate(s.fecha)} 🕐 ${s.hora}\n🔁 ${s.recurrencia}\n${s.categoria}\n\n${saved ? '✓ Sincronizada en Google Sheets\n🔔 Te voy a avisar el día y hora indicados' : '⚠️ No se pudo sincronizar con Sheets'}\n\n¿Querés agregar otra tarea?`,
+        [['➕ Sí, nueva tarea', 'No, gracias']]
       );
     }
   }
 
-  return sendKeyboard(chatId, `No entendí. ¿Qué querés hacer?`,
-    [['➕ Nueva tarea', '📋 Ver app'], ['❓ Ayuda']]
+  return sendKeyboard(chatId, `¡Hola Belén! ¿Querés agregar una nueva tarea?`,
+    [['➕ Sí, nueva tarea', '📋 Ver app'], ['❓ Ayuda', 'No, gracias']]
   );
 }
 
