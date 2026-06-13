@@ -284,6 +284,7 @@ async function handleMessage(msg) {
   const esConsultaProxima = /próxima\s+semana|proxima\s+semana|semana\s+que\s+viene|semana\s+próxima/.test(textoLower);
 
   if (esConsultaProxima) {
+    state[chatId] = null;
     const tasks = await getSheetData();
     const start = arDate(7);
     const end = arDate(14);
@@ -305,6 +306,7 @@ async function handleMessage(msg) {
   }
 
   if (esConsultaSemana) {
+    state[chatId] = null;
     const tasks = await getSheetData();
     const today = arDate(0);
     const end = arDate(7);
@@ -326,6 +328,7 @@ async function handleMessage(msg) {
   }
 
   if (esConsultaHoy) {
+    state[chatId] = null;
     const tasks = await getSheetData();
     const today = arDate(0);
     const hoy = tasks.filter(t => !t.completada && t.fecha === today)
