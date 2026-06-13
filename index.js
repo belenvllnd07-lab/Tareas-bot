@@ -98,17 +98,25 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('es-AR', { weekday:'short', day:'numeric', month:'short' });
 }
 
+function arDate(offsetDays = 0) {
+  const d = new Date();
+  d.setHours(d.getHours() - 3); // UTC-3 Argentina
+  if (offsetDays) d.setDate(d.getDate() + offsetDays);
+  return d.toISOString().split('T')[0];
+}
+
 function todayStr() {
-  return new Date().toISOString().split('T')[0];
+  return arDate(0);
 }
 
 function nowHour() {
-  return new Date().toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12: false });
+  const d = new Date();
+  d.setHours(d.getHours() - 3);
+  return d.toISOString().substr(11, 5);
 }
 
 function getWeekEnd() {
-  const d = new Date(); d.setDate(d.getDate() + 7);
-  return d.toISOString().split('T')[0];
+  return arDate(7);
 }
 
 // ── REMINDERS ────────────────────────────────────────────
@@ -197,7 +205,7 @@ async function handleMessage(msg) {
   const chatId = msg.chat.id.toString();
   const text = (msg.text || '').trim();
 
-  if (text === '/start' || /^hola$/i.test(text) || /^buenas$/i.test(text) || /^hey$/i.test(text) || /^buen(os|as) d(ía|ia)s?$/i.test(text)) {
+  if (text === '/start' || /^hola$/i.test(text) || /^holi$/i.test(text) || /^holanda$/i.test(text) || /^boti$/i.test(text) || /^buenas$/i.test(text) || /^hey$/i.test(text) || /^buen(os|as) d(ía|ia)s?$/i.test(text)) {
     state[chatId] = null;
     return sendKeyboard(chatId,
       `👋 ¡Hola Belén! ¿Querés agregar una nueva tarea?`,
@@ -238,10 +246,10 @@ async function handleMessage(msg) {
     if (s.step === 'fecha' || s.step === 'fecha_manual') {
       const today = new Date();
       let fecha;
-      if (text === 'Hoy') { fecha = today.toISOString().split('T')[0]; }
-      else if (text === 'Mañana') { today.setDate(today.getDate()+1); fecha = today.toISOString().split('T')[0]; }
-      else if (text === 'En 3 días') { today.setDate(today.getDate()+3); fecha = today.toISOString().split('T')[0]; }
-      else if (text === 'En 1 semana') { today.setDate(today.getDate()+7); fecha = today.toISOString().split('T')[0]; }
+      if (text === 'Hoy') { fecha = arDate(0); }
+      else if (text === 'Mañana') { fecha = arDate(1); }
+      else if (text === 'En 3 días') { fecha = arDate(3); }
+      else if (text === 'En 1 semana') { fecha = arDate(7); }
       else if (text === 'Otra fecha') { s.step = 'fecha_manual'; return sendMessage(chatId, `📅 Escribí la fecha en formato *DD/MM/AAAA*:`); }
       else {
         const p = text.split('/');
