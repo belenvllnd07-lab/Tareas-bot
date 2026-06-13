@@ -334,7 +334,7 @@ async function handleMessage(msg) {
     const hoy = tasks.filter(t => !t.completada && t.fecha === today)
       .sort((a,b) => (a.hora || '').localeCompare(b.hora || ''));
     if (hoy.length === 0) {
-      return sendKeyboard(chatId, `📋 No tenés tareas pendientes para hoy. ¡Día libre! 🎉`, [['➕ Nueva tarea', '📋 Ver app']]);
+      return sendKeyboard(chatId, `📋 ¡Todo al día Belén! No tenés nada pendiente para hoy 🎉`, [['➕ Nueva tarea', '📋 Ver app']]);
     }
     let msg = `📋 *Tareas de hoy*\n\n`;
     hoy.forEach(t => { msg += `• ${t.categoria} *${t.nombre}*${t.hora ? ` 🕐 ${t.hora}` : ''}
