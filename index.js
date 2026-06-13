@@ -294,16 +294,11 @@ async function handleMessage(msg) {
     }
     const porDia = {};
     semana.forEach(t => { if (!porDia[t.fecha]) porDia[t.fecha] = []; porDia[t.fecha].push(t); });
-    let msg = `📋 *Tareas de la próxima semana*
-
-`;
+    let msg = `📋 *Tareas de la próxima semana*\n\n`;
     for (const [fecha, tareas] of Object.entries(porDia)) {
-      msg += `*${formatDate(fecha)}*
-`;
-      tareas.forEach(t => { msg += `  • ${t.categoria} ${t.nombre}${t.hora ? ` 🕐 ${t.hora}` : ''}
-`; });
-      msg += '
-';
+      msg += `*${formatDate(fecha)}*\n`;
+      tareas.forEach(t => { msg += `  • ${t.categoria} ${t.nombre}${t.hora ? ` 🕐 ${t.hora}` : ''}\n`; });
+      msg += '\n';
     }
     msg += `_${semana.length} tarea${semana.length !== 1 ? 's' : ''} en total_`;
     return sendKeyboard(chatId, msg, [['➕ Nueva tarea', '📋 Ver app']]);
@@ -320,16 +315,11 @@ async function handleMessage(msg) {
     }
     const porDia = {};
     semana.forEach(t => { if (!porDia[t.fecha]) porDia[t.fecha] = []; porDia[t.fecha].push(t); });
-    let msg = `📋 *Tareas de esta semana*
-
-`;
+    let msg = `📋 *Tareas de esta semana*\n\n`;
     for (const [fecha, tareas] of Object.entries(porDia)) {
-      msg += `*${formatDate(fecha)}*
-`;
-      tareas.forEach(t => { msg += `  • ${t.categoria} ${t.nombre}${t.hora ? ` 🕐 ${t.hora}` : ''}
-`; });
-      msg += '
-';
+      msg += `*${formatDate(fecha)}*\n`;
+      tareas.forEach(t => { msg += `  • ${t.categoria} ${t.nombre}${t.hora ? ` 🕐 ${t.hora}` : ''}\n`; });
+      msg += '\n';
     }
     msg += `_${semana.length} tarea${semana.length !== 1 ? 's' : ''} en total_`;
     return sendKeyboard(chatId, msg, [['➕ Nueva tarea', '📋 Ver app']]);
@@ -343,9 +333,7 @@ async function handleMessage(msg) {
     if (hoy.length === 0) {
       return sendKeyboard(chatId, `📋 No tenés tareas pendientes para hoy. ¡Día libre! 🎉`, [['➕ Nueva tarea', '📋 Ver app']]);
     }
-    let msg = `📋 *Tareas de hoy*
-
-`;
+    let msg = `📋 *Tareas de hoy*\n\n`;
     hoy.forEach(t => { msg += `• ${t.categoria} *${t.nombre}*${t.hora ? ` 🕐 ${t.hora}` : ''}
 `; });
     msg += `
