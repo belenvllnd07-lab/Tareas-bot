@@ -91,6 +91,31 @@ async function appendToSheet(row) {
   } catch(e) { return false; }
 }
 
+async function updateTaskSubtareas(taskId, subtareas) {
+  const token = process.env.GOOGLE_TOKEN;
+  if (!token) return false;
+  try {
+    // Get all rows to find the row number
+    const res = await httpsGet(
+      'sheets.googleapis.com',
+      `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201!A2:J1000`,
+      token
+    );
+    if (!res.values) return false;
+    const rowIndex = res.values.findIndex(row => row[0] === taskId);
+    if (rowIndex === -1) return false;
+    const sheetRow = rowIndex + 2; // +2 for header and 0-index
+    const range = `Hoja%201!I${sheetRow}`;
+    await httpsPost(
+      'sheets.googleapis.com',
+      `/v4/spreadsheets/${SHEET_ID}/values/${range}?valueInputOption=RAW`,
+      { values: [[JSON.stringify(subtareas)]] },
+      token
+    );
+    return true;
+  } catch(e) { console.error('updateTaskSubtareas error:', e); return false; }
+}
+
 // ── DATE HELPERS ─────────────────────────────────────────
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -281,17 +306,82 @@ async function handleMessage(msg) {
       );
     }
 
+    if (s.step === 'subtarea_ask') {
+      if (text === '➕ Sí, agregar subtarea') {
+        s.step = 'subtarea_nombre';
+        return sendMessage(chatId, `📎 ¿Cuál es el nombre de la subtarea?`);
+      } else {
+        state[chatId] = null;
+        return sendKeyboard(chatId, `¿Querés agregar otra tarea?`,
+          [['➕ Sí, nueva tarea', 'No, gracias']]
+        );
+      }
+    }
+
+    if (s.step === 'subtarea_nombre') {
+      s.subtareaNombre = text;
+      s.step = 'subtarea_fecha';
+      return sendKeyboard(chatId, `📅 ¿Para cuándo es la subtarea *"${text}"*?`,
+        [['Mismo día', 'Mañana'], ['En 3 días', 'En 1 semana']]
+      );
+    }
+
+    if (s.step === 'subtarea_fecha') {
+      let fecha;
+      if (text === 'Mismo día') { fecha = s.fecha; }
+      else if (text === 'Mañana') { fecha = arDate(1); }
+      else if (text === 'En 3 días') { fecha = arDate(3); }
+      else if (text === 'En 1 semana') { fecha = arDate(7); }
+      else { fecha = s.fecha; }
+
+      // Load task, add subtask, save back
+      const tasks = await getSheetData();
+      const task = tasks.find(t => t.id === s.tareaId);
+      if (task) {
+        if (!task.subtareas) task.subtareas = [];
+        task.subtareas.push({
+          id: Date.now().toString(),
+          nombre: s.subtareaNombre,
+          fecha, hora: '09:00', completada: false
+        });
+        // Update the sheet row
+        await updateTaskSubtareas(s.tareaId, task.subtareas);
+      }
+
+      s.step = 'subtarea_ask';
+      return sendKeyboard(chatId,
+        `✅ Subtarea *"${s.subtareaNombre}"* agregada para ${formatDate(fecha)}.
+
+¿Querés agregar otra subtarea?`,
+        [['➕ Sí, agregar subtarea', 'Listo, sin más subtareas']]
+      );
+    }
+
     if (s.step === 'categoria') {
       s.categoria = text;
       const id = Date.now().toString();
       const row = [id, s.nombre, '', s.fecha, s.hora, s.recurrencia, s.categoria, 'false', '[]', new Date().toISOString()];
       const saved = await appendToSheet(row);
-      state[chatId] = null;
+      const resumen = `✅ *Tarea guardada!*\n\n📋 *${s.nombre}*\n📅 ${formatDate(s.fecha)} 🕐 ${s.hora}\n🔁 ${s.recurrencia}\n${s.categoria}\n\n${saved ? '✓ Sincronizada en Google Sheets\n🔔 Te voy a avisar el día y hora indicados' : '⚠️ No se pudo sincronizar con Sheets'}`;
+      state[chatId] = { step: 'subtarea_ask', tareaId: id, tareaNombre: s.nombre };
       return sendKeyboard(chatId,
-        `✅ *Tarea guardada!*\n\n📋 *${s.nombre}*\n📅 ${formatDate(s.fecha)} 🕐 ${s.hora}\n🔁 ${s.recurrencia}\n${s.categoria}\n\n${saved ? '✓ Sincronizada en Google Sheets\n🔔 Te voy a avisar el día y hora indicados' : '⚠️ No se pudo sincronizar con Sheets'}\n\n¿Querés agregar otra tarea?`,
-        [['➕ Sí, nueva tarea', 'No, gracias']]
+        `${resumen}\n\n¿Querés agregar subtareas a esta tarea?`,
+        [['➕ Sí, agregar subtarea', 'No, gracias']]
       );
     }
+  }
+
+  // Subtask flow outside state (buttons)
+  if (text === '➕ Sí, agregar subtarea' && state[chatId] && state[chatId].step === 'subtarea_ask') {
+    state[chatId].step = 'subtarea_nombre';
+    return sendMessage(chatId, `📎 ¿Cuál es el nombre de la subtarea?`);
+  }
+
+  if (text === 'Listo, sin más subtareas' && state[chatId] && state[chatId].step === 'subtarea_ask') {
+    state[chatId] = null;
+    return sendKeyboard(chatId, `¡Perfecto! ¿Querés agregar otra tarea?`,
+      [['➕ Sí, nueva tarea', 'No, gracias']]
+    );
   }
 
   return sendKeyboard(chatId, `¡Hola Belén! ¿Querés agregar una nueva tarea?`,
