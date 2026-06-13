@@ -261,12 +261,12 @@ async function handleMessage(msg) {
       else { return sendMessage(chatId, `❌ Formato incorrecto. Usá HH:MM (ej: 09:30)`); }
       s.hora = hora; s.step = 'recurrencia';
       return sendKeyboard(chatId, `🔁 ¿Se repite?`,
-        [['Una vez', 'Diaria'], ['Semanal', 'Quincenal'], ['Mensual', 'Anual']]
+        [['No', 'Diaria'], ['Semanal', 'Quincenal'], ['Mensual', 'Anual']]
       );
     }
 
     if (s.step === 'recurrencia') {
-      const recMap = { 'Una vez':'ninguna','Diaria':'diaria','Semanal':'semanal','Quincenal':'quincenal','Mensual':'mensual','Anual':'anual' };
+      const recMap = { 'No':'ninguna','Una vez':'ninguna','Diaria':'diaria','Semanal':'semanal','Quincenal':'quincenal','Mensual':'mensual','Anual':'anual' };
       s.recurrencia = recMap[text] || 'ninguna'; s.step = 'categoria';
       return sendKeyboard(chatId, `📂 ¿Categoría?`,
         [['💰 Pagos', '🏥 Salud'], ['🏠 Hogar', '💼 Trabajo'], ['📞 Llamadas', '📋 General']]
