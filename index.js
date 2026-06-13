@@ -416,11 +416,13 @@ _${hoy.length} tarea${hoy.length !== 1 ? 's' : ''} pendiente${hoy.length !== 1 ?
     );
   }
 
-  if (text === '/start' || /^hola$/i.test(text) || /^holi$/i.test(text) || /^holanda$/i.test(text) || /^boti$/i.test(text) || /^buenas$/i.test(text) || /^hey$/i.test(text) || /^buen(os|as) d(ía|ia)s?$/i.test(text)) {
+  const esсалudo = /^(hola|holi|holanda|boti|buenas|hey|buen[oa]s\s+d[ií]as?)$/i.test(text) || text === '/start';
+
+  if (esалudo) {
     state[chatId] = null;
     return sendKeyboard(chatId,
-      `👋 ¡Hola Belén! ¿Querés agregar una nueva tarea?`,
-      [['➕ Sí, nueva tarea', '📋 Ver app'], ['❓ Ayuda', 'No, gracias']]
+      `👋 ¡Hola Belén! ¿Qué querés hacer?`,
+      [['➕ Nueva tarea', '📋 Pendientes de hoy'], ['📅 Esta semana', '📅 Próxima semana'], ['🔍 Ver app']]
     );
   }
 
@@ -435,11 +437,11 @@ _${hoy.length} tarea${hoy.length !== 1 ? 's' : ''} pendiente${hoy.length !== 1 ?
     );
   }
 
-  if (text === '📋 Ver app' || text === '/app') {
+  if (text === '🔍 Ver app' || text === '📋 Ver app' || text === '/app') {
     return sendMessage(chatId, `📱 Abrí tu app:\n${APP_URL}`);
   }
 
-  if (text === '➕ Nueva tarea' || text === '➕ Sí, nueva tarea' || text === '/nueva') {
+  if (text === '➕ Nueva tarea' || text === '➕ Sí, nueva tarea' || text === '/nueva' || text === '➕ Sí, agregar subtarea' && !state[chatId]) {
     state[chatId] = { step: 'nombre' };
     return sendMessage(chatId, `📝 *Nueva tarea*\n\n¿Cuál es el nombre?`);
   }
@@ -499,7 +501,7 @@ _${hoy.length} tarea${hoy.length !== 1 ? 's' : ''} pendiente${hoy.length !== 1 ?
       } else {
         state[chatId] = null;
         return sendKeyboard(chatId, `¿Querés agregar otra tarea?`,
-          [['➕ Sí, nueva tarea', 'No, gracias']]
+          [['➕ Nueva tarea', 'No, gracias']]
         );
       }
     }
@@ -566,12 +568,12 @@ _${hoy.length} tarea${hoy.length !== 1 ? 's' : ''} pendiente${hoy.length !== 1 ?
   if (text === 'Listo, sin más subtareas' && state[chatId] && state[chatId].step === 'subtarea_ask') {
     state[chatId] = null;
     return sendKeyboard(chatId, `¡Perfecto! ¿Querés agregar otra tarea?`,
-      [['➕ Sí, nueva tarea', 'No, gracias']]
+      [['➕ Nueva tarea', 'No, gracias']]
     );
   }
 
-  return sendKeyboard(chatId, `¡Hola Belén! ¿Querés agregar una nueva tarea?`,
-    [['➕ Sí, nueva tarea', '📋 Ver app'], ['❓ Ayuda', 'No, gracias']]
+  return sendKeyboard(chatId, `👋 ¡Hola Belén! ¿Qué querés hacer?`,
+    [['➕ Nueva tarea', '📋 Pendientes de hoy'], ['📅 Esta semana', '📅 Próxima semana'], ['🔍 Ver app']]
   );
 }
 
