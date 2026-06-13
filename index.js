@@ -416,9 +416,9 @@ _${hoy.length} tarea${hoy.length !== 1 ? 's' : ''} pendiente${hoy.length !== 1 ?
     );
   }
 
-  const esсалudo = /^(hola|holi|holanda|boti|buenas|hey|buen[oa]s\s+d[ií]as?)$/i.test(text) || text === '/start';
+  const esSaludo = /^(hola|holi|holanda|boti|buenas|hey|buen[oa]s\s+d[ií]as?)$/i.test(text) || text === '/start';
 
-  if (esалudo) {
+  if (esSaludo) {
     state[chatId] = null;
     return sendKeyboard(chatId,
       `👋 ¡Hola Belén! ¿Qué querés hacer?`,
