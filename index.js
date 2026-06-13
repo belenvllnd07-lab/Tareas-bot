@@ -116,6 +116,40 @@ async function updateTaskSubtareas(taskId, subtareas) {
   } catch(e) { console.error('updateTaskSubtareas error:', e); return false; }
 }
 
+async function markTaskDone(taskId) {
+  const token = process.env.GOOGLE_TOKEN;
+  if (!token) return false;
+  try {
+    const res = await httpsGet('sheets.googleapis.com', `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201!A2:J1000`, token);
+    if (!res.values) return false;
+    const rowIndex = res.values.findIndex(row => row[0] === taskId);
+    if (rowIndex === -1) return false;
+    const sheetRow = rowIndex + 2;
+    await httpsPost('sheets.googleapis.com',
+      `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201!H${sheetRow}?valueInputOption=RAW`,
+      { values: [['true']] }, token
+    );
+    return true;
+  } catch(e) { return false; }
+}
+
+async function updateTaskFecha(taskId, fecha, hora) {
+  const token = process.env.GOOGLE_TOKEN;
+  if (!token) return false;
+  try {
+    const res = await httpsGet('sheets.googleapis.com', `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201!A2:J1000`, token);
+    if (!res.values) return false;
+    const rowIndex = res.values.findIndex(row => row[0] === taskId);
+    if (rowIndex === -1) return false;
+    const sheetRow = rowIndex + 2;
+    await httpsPost('sheets.googleapis.com',
+      `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201!D${sheetRow}:E${sheetRow}?valueInputOption=RAW`,
+      { values: [[fecha, hora]] }, token
+    );
+    return true;
+  } catch(e) { return false; }
+}
+
 // ── DATE HELPERS ─────────────────────────────────────────
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -192,8 +226,18 @@ async function checkTaskReminders() {
   });
 
   for (const task of toRemind) {
+    // Store pending reminder so user can act on it
+    state[CHAT_ID] = state[CHAT_ID] || {};
+    state[CHAT_ID].pendingReminder = { taskId: task.id, taskNombre: task.nombre };
+
     await sendMessage(CHAT_ID,
-      `🔔 *Recordatorio*\n\n${task.categoria} *${task.nombre}*\n📅 ${formatDate(task.fecha)} 🕐 ${task.hora}${task.recurrencia !== 'ninguna' ? `\n🔁 ${task.recurrencia}` : ''}\n\n_Abrí la app para marcarla como hecha o aplazarla._`
+      `🔔 *Recordatorio*\n\n${task.categoria} *${task.nombre}*\n📅 ${formatDate(task.fecha)} 🕐 ${task.hora}${task.recurrencia !== 'ninguna' ? `\n🔁 ${task.recurrencia}` : ''}`,
+      {
+        reply_markup: {
+          keyboard: [['✅ Marcar como hecha', '⏰ Aplazar']],
+          resize_keyboard: true, one_time_keyboard: true
+        }
+      }
     );
   }
 }
@@ -229,6 +273,78 @@ function startScheduler() {
 async function handleMessage(msg) {
   const chatId = msg.chat.id.toString();
   const text = (msg.text || '').trim();
+
+  // Handle reminder actions
+  if (text === '✅ Marcar como hecha' && state[chatId] && state[chatId].pendingReminder) {
+    const { taskId, taskNombre } = state[chatId].pendingReminder;
+    delete state[chatId].pendingReminder;
+    await markTaskDone(taskId);
+    return sendKeyboard(chatId,
+      `✅ *¡Bien hecho Belén!* "${taskNombre}" marcada como completada. 🎉`,
+      [['➕ Nueva tarea', '📋 Ver app']]
+    );
+  }
+
+  if (text === '⏰ Aplazar' && state[chatId] && state[chatId].pendingReminder) {
+    state[chatId].step = 'aplazar_reminder';
+    return sendKeyboard(chatId,
+      `⏰ ¿Cuánto tiempo querés aplazarla?`,
+      [['30 minutos', '1 hora'], ['2 horas', '4 horas'], ['Mañana', 'Otra fecha']]
+    );
+  }
+
+  if (state[chatId] && state[chatId].step === 'aplazar_reminder' && state[chatId].pendingReminder) {
+    const { taskId, taskNombre } = state[chatId].pendingReminder;
+    let nuevaFecha, nuevaHora;
+    const now = new Date(); now.setHours(now.getHours() - 3);
+
+    if (text === '30 minutos') { now.setMinutes(now.getMinutes() + 30); }
+    else if (text === '1 hora') { now.setHours(now.getHours() + 1); }
+    else if (text === '2 horas') { now.setHours(now.getHours() + 2); }
+    else if (text === '4 horas') { now.setHours(now.getHours() + 4); }
+    else if (text === 'Mañana') { now.setDate(now.getDate() + 1); }
+    else if (text === 'Otra fecha') {
+      state[chatId].step = 'aplazar_fecha_manual';
+      return sendMessage(chatId, `📅 Escribí la nueva fecha en formato *DD/MM/AAAA*:`);
+    } else {
+      // manual date input
+      const p = text.split('/');
+      if (p.length === 3) {
+        nuevaFecha = `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+        nuevaHora = '09:00';
+      } else {
+        return sendMessage(chatId, `❌ Formato incorrecto. Usá DD/MM/AAAA`);
+      }
+    }
+
+    if (!nuevaFecha) {
+      nuevaFecha = now.toISOString().split('T')[0];
+      nuevaHora = now.toISOString().substr(11, 5);
+    }
+
+    await updateTaskFecha(taskId, nuevaFecha, nuevaHora);
+    delete state[chatId].pendingReminder;
+    state[chatId].step = null;
+
+    return sendKeyboard(chatId,
+      `⏰ *"${taskNombre}"* aplazada para el ${formatDate(nuevaFecha)} a las ${nuevaHora} hs.`,
+      [['➕ Nueva tarea', '📋 Ver app']]
+    );
+  }
+
+  if (state[chatId] && state[chatId].step === 'aplazar_fecha_manual' && state[chatId].pendingReminder) {
+    const { taskId, taskNombre } = state[chatId].pendingReminder;
+    const p = text.split('/');
+    if (p.length !== 3) return sendMessage(chatId, `❌ Formato incorrecto. Usá DD/MM/AAAA`);
+    const nuevaFecha = `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+    await updateTaskFecha(taskId, nuevaFecha, '09:00');
+    delete state[chatId].pendingReminder;
+    state[chatId].step = null;
+    return sendKeyboard(chatId,
+      `⏰ *"${taskNombre}"* aplazada para el ${formatDate(nuevaFecha)} a las 09:00 hs.`,
+      [['➕ Nueva tarea', '📋 Ver app']]
+    );
+  }
 
   if (text === '/start' || /^hola$/i.test(text) || /^holi$/i.test(text) || /^holanda$/i.test(text) || /^boti$/i.test(text) || /^buenas$/i.test(text) || /^hey$/i.test(text) || /^buen(os|as) d(ía|ia)s?$/i.test(text)) {
     state[chatId] = null;
