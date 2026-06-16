@@ -63,36 +63,35 @@ function sendKeyboard(chatId, text, buttons) {
 function gasRequest(body) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
-    const url = new URL(GAS_URL);
-    const req = https.request({
-      hostname: url.hostname,
-      path: url.pathname + url.search,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
-    }, res => {
-      // Follow redirects
-      if (res.statusCode === 302 || res.statusCode === 301) {
-        const redirectUrl = new URL(res.headers.location);
-        const req2 = https.request({
-          hostname: redirectUrl.hostname,
-          path: redirectUrl.pathname + redirectUrl.search,
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
-        }, res2 => {
-          let raw = '';
-          res2.on('data', d => raw += d);
-          res2.on('end', () => { try { resolve(JSON.parse(raw)); } catch(e) { resolve({ok:false}); } });
+
+    function doRequest(urlStr, method, postData) {
+      const url = new URL(urlStr);
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method: method,
+        headers: { 'Content-Type': 'application/json' }
+      };
+      if (postData) options.headers['Content-Length'] = Buffer.byteLength(postData);
+
+      const req = https.request(options, res => {
+        if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
+          // Follow redirect — use GET for redirects (GAS behavior)
+          return doRequest(res.headers.location, 'POST', postData);
+        }
+        let raw = '';
+        res.on('data', d => raw += d);
+        res.on('end', () => {
+          try { resolve(JSON.parse(raw)); }
+          catch(e) { resolve({ ok: false, error: 'parse error: ' + raw.substr(0,100) }); }
         });
-        req2.on('error', reject);
-        req2.write(data); req2.end();
-        return;
-      }
-      let raw = '';
-      res.on('data', d => raw += d);
-      res.on('end', () => { try { resolve(JSON.parse(raw)); } catch(e) { resolve({ok:false}); } });
-    });
-    req.on('error', reject);
-    req.write(data); req.end();
+      });
+      req.on('error', reject);
+      if (postData) req.write(postData);
+      req.end();
+    }
+
+    doRequest(GAS_URL, 'POST', data);
   });
 }
 
