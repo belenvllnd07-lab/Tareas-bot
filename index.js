@@ -4,6 +4,7 @@ const BOT_TOKEN = '8965677289:AAHjoNscXXs64kFedF8F1KqwjpeqCIiWi_M';
 const CHAT_ID   = '8959251221';
 const SHEET_ID  = '1f0v6D6ue9iUp5VLMcyiFvY5EpNIpMKWLcS0M53rVeMs';
 const APP_URL   = 'https://belenvllnd07-lab.github.io/mis-tareas/task-manager.html';
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbzLjpeoGobZHFGxAuV9Qt-c45vcH5wxIJykNwwb0mogHMoC8-dHN5bmx6xIydOB79Hx/exec';
 
 const state = {};
 
@@ -58,69 +59,82 @@ function sendKeyboard(chatId, text, buttons) {
   });
 }
 
-// ── SHEETS ───────────────────────────────────────────────
+// ── SHEETS VIA GAS ───────────────────────────────────────
+function gasRequest(body) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const url = new URL(GAS_URL);
+    const req = https.request({
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+    }, res => {
+      // Follow redirects
+      if (res.statusCode === 302 || res.statusCode === 301) {
+        const redirectUrl = new URL(res.headers.location);
+        const req2 = https.request({
+          hostname: redirectUrl.hostname,
+          path: redirectUrl.pathname + redirectUrl.search,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+        }, res2 => {
+          let raw = '';
+          res2.on('data', d => raw += d);
+          res2.on('end', () => { try { resolve(JSON.parse(raw)); } catch(e) { resolve({ok:false}); } });
+        });
+        req2.on('error', reject);
+        req2.write(data); req2.end();
+        return;
+      }
+      let raw = '';
+      res.on('data', d => raw += d);
+      res.on('end', () => { try { resolve(JSON.parse(raw)); } catch(e) { resolve({ok:false}); } });
+    });
+    req.on('error', reject);
+    req.write(data); req.end();
+  });
+}
+
 async function getSheetData() {
-  const token = process.env.GOOGLE_TOKEN;
-  if (!token) return [];
-  const res = await httpsGet('sheets.googleapis.com', `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201!A2:J1000`, token);
-  if (!res.values) return [];
-  return res.values.map(row => ({
-    id: row[0], nombre: row[1] || '', descripcion: row[2] || '',
-    fecha: row[3] || '', hora: row[4] || '09:00',
-    recurrencia: row[5] || 'ninguna', categoria: row[6] || '',
-    completada: row[7] === 'true',
-    subtareas: row[8] ? JSON.parse(row[8]) : []
-  }));
+  try {
+    const res = await gasRequest({ action: 'get' });
+    if (!res.ok || !res.values) return [];
+    return res.values.filter(row => row[0]).map(row => ({
+      id: row[0], nombre: row[1] || '', descripcion: row[2] || '',
+      fecha: row[3] || '', hora: row[4] || '09:00',
+      recurrencia: row[5] || 'ninguna', categoria: row[6] || '',
+      completada: row[7] === 'true',
+      subtareas: row[8] ? JSON.parse(row[8]) : []
+    }));
+  } catch(e) { console.error('getSheetData error:', e); return []; }
 }
 
 async function appendToSheet(row) {
-  const token = process.env.GOOGLE_TOKEN;
-  if (!token) return false;
   try {
-    const r = await httpsPost('sheets.googleapis.com',
-      `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-      { values: [row] }, token);
-    return !r.error;
-  } catch(e) { return false; }
-}
-
-async function updateSheetCell(taskId, col, value) {
-  const token = process.env.GOOGLE_TOKEN;
-  if (!token) return false;
-  try {
-    const res = await httpsGet('sheets.googleapis.com', `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201!A2:A1000`, token);
-    if (!res.values) return false;
-    const rowIndex = res.values.findIndex(r => r[0] === taskId);
-    if (rowIndex === -1) return false;
-    const sheetRow = rowIndex + 2;
-    await httpsPost('sheets.googleapis.com',
-      `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201!${col}${sheetRow}?valueInputOption=RAW`,
-      { values: [[value]] }, token);
-    return true;
+    const res = await gasRequest({ action: 'append', row });
+    return res.ok;
   } catch(e) { return false; }
 }
 
 async function updateTaskSubtareas(taskId, subtareas) {
-  return updateSheetCell(taskId, 'I', JSON.stringify(subtareas));
+  try {
+    const res = await gasRequest({ action: 'update', id: taskId, updates: [{ col: 9, value: JSON.stringify(subtareas) }] });
+    return res.ok;
+  } catch(e) { return false; }
 }
 
 async function markTaskDone(taskId) {
-  return updateSheetCell(taskId, 'H', 'true');
+  try {
+    const res = await gasRequest({ action: 'update', id: taskId, updates: [{ col: 8, value: 'true' }] });
+    return res.ok;
+  } catch(e) { return false; }
 }
 
 async function updateTaskFecha(taskId, fecha, hora) {
-  const token = process.env.GOOGLE_TOKEN;
-  if (!token) return false;
   try {
-    const res = await httpsGet('sheets.googleapis.com', `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201!A2:A1000`, token);
-    if (!res.values) return false;
-    const rowIndex = res.values.findIndex(r => r[0] === taskId);
-    if (rowIndex === -1) return false;
-    const sheetRow = rowIndex + 2;
-    await httpsPost('sheets.googleapis.com',
-      `/v4/spreadsheets/${SHEET_ID}/values/Hoja%201!D${sheetRow}:E${sheetRow}?valueInputOption=RAW`,
-      { values: [[fecha, hora]] }, token);
-    return true;
+    const res = await gasRequest({ action: 'update', id: taskId, updates: [{ col: 4, value: fecha }, { col: 5, value: hora }] });
+    return res.ok;
   } catch(e) { return false; }
 }
 
