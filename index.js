@@ -4,7 +4,7 @@ const BOT_TOKEN = '8965677289:AAHjoNscXXs64kFedF8F1KqwjpeqCIiWi_M';
 const CHAT_ID   = '8959251221';
 const SHEET_ID  = '1f0v6D6ue9iUp5VLMcyiFvY5EpNIpMKWLcS0M53rVeMs';
 const APP_URL   = 'https://belenvllnd07-lab.github.io/mis-tareas/task-manager.html';
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbyj47nJYO2bKduc4-KHG9GgvuPvvSdhKs9hZnSDpc-Pec4job1_tQgvIKU1qGaUfgmM/exec';
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbxcSlCOyFcbkEfa5_sXWRJqZmiUiS1afxZwLDL4s4fY0-wusnTS0ZqyDvjyGuXtiOjE/exec';
 
 const state = {};
 
