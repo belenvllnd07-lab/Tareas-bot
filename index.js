@@ -63,8 +63,9 @@ function sendKeyboard(chatId, text, buttons) {
 function gasRequest(body) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
+    const encodedPayload = encodeURIComponent(data);
 
-    function doRequest(urlStr, method, postData, redirectCount) {
+    function doRequest(urlStr, method, redirectCount) {
       redirectCount = redirectCount || 0;
       if (redirectCount > 5) { resolve({ ok: false, error: 'too many redirects' }); return; }
       const url = new URL(urlStr);
@@ -73,15 +74,14 @@ function gasRequest(body) {
         hostname: url.hostname,
         path: url.pathname + url.search,
         method: method,
-        headers: { 'Content-Type': 'application/json' }
+        headers: {}
       };
-      if (postData) options.headers['Content-Length'] = Buffer.byteLength(postData);
 
       const req = https.request(options, res => {
         console.log(`GAS response: ${res.statusCode}`);
         if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
           console.log(`Redirect to: ${res.headers.location.substr(0,80)}`);
-          return doRequest(res.headers.location, 'POST', postData, redirectCount + 1);
+          return doRequest(res.headers.location, 'GET', redirectCount + 1);
         }
         let raw = '';
         res.on('data', d => raw += d);
@@ -92,11 +92,11 @@ function gasRequest(body) {
         });
       });
       req.on('error', (e) => { console.error('GAS request error:', e.message); reject(e); });
-      if (postData) req.write(postData);
       req.end();
     }
 
-    doRequest(GAS_URL, 'POST', data);
+    const urlWithPayload = GAS_URL + '?payload=' + encodedPayload;
+    doRequest(urlWithPayload, 'GET', 0);
   });
 }
 
