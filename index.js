@@ -64,8 +64,11 @@ function gasRequest(body) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
 
-    function doRequest(urlStr, method, postData) {
+    function doRequest(urlStr, method, postData, redirectCount) {
+      redirectCount = redirectCount || 0;
+      if (redirectCount > 5) { resolve({ ok: false, error: 'too many redirects' }); return; }
       const url = new URL(urlStr);
+      console.log(`GAS request [${redirectCount}]: ${method} ${url.hostname}${url.pathname.substr(0,50)}`);
       const options = {
         hostname: url.hostname,
         path: url.pathname + url.search,
@@ -75,18 +78,20 @@ function gasRequest(body) {
       if (postData) options.headers['Content-Length'] = Buffer.byteLength(postData);
 
       const req = https.request(options, res => {
+        console.log(`GAS response: ${res.statusCode}`);
         if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
-          // Follow redirect — use GET for redirects (GAS behavior)
-          return doRequest(res.headers.location, 'POST', postData);
+          console.log(`Redirect to: ${res.headers.location.substr(0,80)}`);
+          return doRequest(res.headers.location, 'POST', postData, redirectCount + 1);
         }
         let raw = '';
         res.on('data', d => raw += d);
         res.on('end', () => {
+          console.log(`GAS raw response: ${raw.substr(0,200)}`);
           try { resolve(JSON.parse(raw)); }
           catch(e) { resolve({ ok: false, error: 'parse error: ' + raw.substr(0,100) }); }
         });
       });
-      req.on('error', reject);
+      req.on('error', (e) => { console.error('GAS request error:', e.message); reject(e); });
       if (postData) req.write(postData);
       req.end();
     }
@@ -111,9 +116,14 @@ async function getSheetData() {
 
 async function appendToSheet(row) {
   try {
+    console.log('Calling GAS append with row:', JSON.stringify(row));
     const res = await gasRequest({ action: 'append', row });
+    console.log('GAS append response:', JSON.stringify(res));
     return res.ok;
-  } catch(e) { return false; }
+  } catch(e) {
+    console.error('appendToSheet exception:', e.message);
+    return false;
+  }
 }
 
 async function updateTaskSubtareas(taskId, subtareas) {
