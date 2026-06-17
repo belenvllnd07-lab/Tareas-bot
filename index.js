@@ -109,7 +109,8 @@ async function getSheetData() {
       fecha: row[3] || '', hora: row[4] || '09:00',
       recurrencia: row[5] || 'ninguna', categoria: row[6] || '',
       completada: row[7] === 'true',
-      subtareas: row[8] ? JSON.parse(row[8]) : []
+      subtareas: row[8] ? JSON.parse(row[8]) : [],
+      avisoPrevio: row[10] === 'true'
     }));
   } catch(e) { console.error('getSheetData error:', e); return []; }
 }
@@ -212,10 +213,28 @@ _${hoy.length} tarea${hoy.length !== 1 ? 's' : ''} para hoy_`;
   await sendMessage(CHAT_ID, msg);
 }
 
+function minutesBefore(hora, mins) {
+  const [h, m] = hora.split(':').map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  d.setMinutes(d.getMinutes() - mins);
+  return d.toTimeString().substr(0, 5);
+}
+
 async function checkTaskReminders() {
   const tasks = await getSheetData();
   const today = todayStr();
   const now = nowHour();
+
+  // Aviso 10 minutos antes
+  const toRemindPrevio = tasks.filter(t => !t.completada && t.fecha === today && t.avisoPrevio && minutesBefore(t.hora, 10) === now);
+  for (const task of toRemindPrevio) {
+    await sendMessage(CHAT_ID,
+      `⏱️ *Aviso previo* — en 10 minutos\n\n${task.categoria} *${task.nombre}*\n🕐 ${task.hora}`
+    );
+  }
+
+  // Recordatorio a la hora exacta
   const toRemind = tasks.filter(t => !t.completada && t.fecha === today && t.hora === now);
   for (const task of toRemind) {
     state[CHAT_ID] = state[CHAT_ID] || {};
@@ -426,7 +445,14 @@ async function handleMessage(msg) {
 
     if (s.step === 'recurrencia') {
       const recMap = { 'No':'ninguna','Diaria':'diaria','Semanal':'semanal','Quincenal':'quincenal','Mensual':'mensual','Anual':'anual' };
-      s.recurrencia = recMap[text] || 'ninguna'; s.step = 'categoria';
+      s.recurrencia = recMap[text] || 'ninguna'; s.step = 'aviso_previo';
+      return sendKeyboard(chatId, '⏱️ ¿Avisar 10 minutos antes también?',
+        [['Sí', 'No']]);
+    }
+
+    if (s.step === 'aviso_previo') {
+      s.avisoPrevio = (text === 'Sí');
+      s.step = 'categoria';
       return sendKeyboard(chatId, '📂 ¿Categoría?',
         [['💰 Pagos', '🏥 Salud'], ['🏠 Hogar', '💼 Trabajo'], ['📞 Llamadas', '📋 General']]);
     }
@@ -434,9 +460,9 @@ async function handleMessage(msg) {
     if (s.step === 'categoria') {
       s.categoria = text;
       const id = Date.now().toString();
-      const row = [id, s.nombre, '', s.fecha, s.hora, s.recurrencia, s.categoria, 'false', '[]', new Date().toISOString()];
+      const row = [id, s.nombre, '', s.fecha, s.hora, s.recurrencia, s.categoria, 'false', '[]', new Date().toISOString(), s.avisoPrevio ? 'true' : 'false'];
       const saved = await appendToSheet(row);
-      const resumen = `✅ *Tarea guardada!*\n\n📋 *${s.nombre}*\n📅 ${formatDate(s.fecha)} 🕐 ${s.hora}\n🔁 ${s.recurrencia}\n${s.categoria}\n\n${saved ? '✓ Sincronizada en Google Sheets\n🔔 Te voy a avisar el día y hora indicados' : '⚠️ No se pudo sincronizar con Sheets'}`;
+      const resumen = `✅ *Tarea guardada!*\n\n📋 *${s.nombre}*\n📅 ${formatDate(s.fecha)} 🕐 ${s.hora}\n🔁 ${s.recurrencia}\n${s.categoria}${s.avisoPrevio ? '\n⏱️ Aviso 10 min antes activado' : ''}\n\n${saved ? '✓ Sincronizada en Google Sheets\n🔔 Te voy a avisar el día y hora indicados' : '⚠️ No se pudo sincronizar con Sheets'}`;
       state[chatId] = { step: 'subtarea_ask', tareaId: id, tareaNombre: s.nombre };
       return sendKeyboard(chatId, `${resumen}\n\n¿Querés agregar subtareas?`,
         [['➕ Sí, agregar subtarea', 'No, gracias']]);
